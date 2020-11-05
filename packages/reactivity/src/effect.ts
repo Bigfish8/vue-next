@@ -138,6 +138,10 @@ export function resetTracking() {
   shouldTrack = last === undefined ? true : last
 }
 
+// target -> key -> object
+// 在响应式激活的情况下，track会将依赖添加
+// activeEffect到底是个啥？
+// activeEffect为激活的effect环境
 export function track(target: object, type: TrackOpTypes, key: unknown) {
   if (!shouldTrack || activeEffect === undefined) {
     return
@@ -150,10 +154,12 @@ export function track(target: object, type: TrackOpTypes, key: unknown) {
   if (!dep) {
     depsMap.set(key, (dep = new Set()))
   }
+  // activeEffect为一个fn，可能有很多ref指向这个fn
   if (!dep.has(activeEffect)) {
     dep.add(activeEffect)
     activeEffect.deps.push(dep)
     if (__DEV__ && activeEffect.options.onTrack) {
+      // 用于在开发环境console?
       activeEffect.options.onTrack({
         effect: activeEffect,
         target,
@@ -172,6 +178,7 @@ export function trigger(
   oldValue?: unknown,
   oldTarget?: Map<unknown, unknown> | Set<unknown>
 ) {
+  // 当前对象key -> effect Set的映射map
   const depsMap = targetMap.get(target)
   if (!depsMap) {
     // never been tracked
@@ -189,9 +196,11 @@ export function trigger(
     }
   }
 
+  // 这里嘛意思
   if (type === TriggerOpTypes.CLEAR) {
     // collection being cleared
     // trigger all effects for target
+    // effects中会保存所有key对应的effect, activeEffect除外
     depsMap.forEach(add)
   } else if (key === 'length' && isArray(target)) {
     depsMap.forEach((dep, key) => {
@@ -207,8 +216,11 @@ export function trigger(
 
     // also run for iteration key on ADD | DELETE | Map.SET
     switch (type) {
+      // ADD
       case TriggerOpTypes.ADD:
         if (!isArray(target)) {
+          // 如果新增了属性，也触发迭代
+          // 在effect中进行了 in object.entries()的操作？
           add(depsMap.get(ITERATE_KEY))
           if (isMap(target)) {
             add(depsMap.get(MAP_KEY_ITERATE_KEY))
@@ -219,6 +231,7 @@ export function trigger(
         }
         break
       case TriggerOpTypes.DELETE:
+        // todo 这里很奇怪 为什么不add delete key对应的依赖？
         if (!isArray(target)) {
           add(depsMap.get(ITERATE_KEY))
           if (isMap(target)) {
@@ -234,6 +247,7 @@ export function trigger(
     }
   }
 
+  // 运行effect中的函数
   const run = (effect: ReactiveEffect) => {
     if (__DEV__ && effect.options.onTrigger) {
       effect.options.onTrigger({

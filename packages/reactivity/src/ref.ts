@@ -1,3 +1,7 @@
+/**
+ * @done
+ */
+
 import { track, trigger } from './effect'
 import { TrackOpTypes, TriggerOpTypes } from './operations'
 import { isArray, isObject, hasChanged } from '@vue/shared'
@@ -5,6 +9,15 @@ import { reactive, isProxy, toRaw, isReactive } from './reactive'
 import { CollectionTypes } from './collectionHandlers'
 
 declare const RefSymbol: unique symbol
+
+// eg :
+// 1.ref(0)
+// 2.ref({
+//    a: 1
+//  })
+// 3.ref({
+//  a: ref(0)
+// })
 
 export interface Ref<T = any> {
   value: T
@@ -22,6 +35,7 @@ export interface Ref<T = any> {
 
 export type ToRefs<T = any> = { [K in keyof T]: Ref<T[K]> }
 
+// 在这里对嵌套了ref的对象进行处理
 const convert = <T extends unknown>(val: T): T =>
   isObject(val) ? reactive(val) : val
 
@@ -30,6 +44,9 @@ export function isRef(r: any): r is Ref {
   return Boolean(r && r.__v_isRef === true)
 }
 
+// UnwrapRef为了给Ref解套，使之能正确推导出类型 ts类型环境的补充
+// 见文章https://juejin.im/post/6844904126283776014
+// 传入值为对象，若为Ref则原样返回，否则内部解包
 export function ref<T extends object>(
   value: T
 ): T extends Ref ? T : Ref<UnwrapRef<T>>
@@ -37,6 +54,12 @@ export function ref<T>(value: T): Ref<UnwrapRef<T>>
 export function ref<T = any>(): Ref<T | undefined>
 export function ref(value?: unknown) {
   return createRef(value)
+}
+
+// value为any
+let a = ref()
+a.value = {
+  a: '123'
 }
 
 export function shallowRef<T extends object>(
@@ -48,7 +71,9 @@ export function shallowRef(value?: unknown) {
   return createRef(value, true)
 }
 
+// Ref的value字段可能为原始值，或被reactive后的对象
 class RefImpl<T> {
+  // 这里_value可能是被reactive()处理后的对象
   private _value: T
 
   public readonly __v_isRef = true
@@ -58,6 +83,7 @@ class RefImpl<T> {
   }
 
   get value() {
+    // 依赖追踪使用raw value
     track(toRaw(this), TrackOpTypes.GET, 'value')
     return this._value
   }
@@ -78,14 +104,18 @@ function createRef(rawValue: unknown, shallow = false) {
   return new RefImpl(rawValue, shallow)
 }
 
+// 强制触发shallowRef把
 export function triggerRef(ref: Ref) {
   trigger(toRaw(ref), TriggerOpTypes.SET, 'value', __DEV__ ? ref.value : void 0)
 }
 
+// 复原
 export function unref<T>(ref: T): T extends Ref<infer V> ? V : T {
   return isRef(ref) ? (ref.value as any) : ref
 }
 
+// 这是个啥？
+// 包了一层到ref的代理
 const shallowUnwrapHandlers: ProxyHandler<any> = {
   get: (target, key, receiver) => unref(Reflect.get(target, key, receiver)),
   set: (target, key, value, receiver) => {
@@ -98,7 +128,16 @@ const shallowUnwrapHandlers: ProxyHandler<any> = {
     }
   }
 }
+let c = ref(3)
+let d = {
+  name: c,
+  age: 12
+}
+let e = proxyRefs(d)
+e.name
+e.age
 
+// ref -> reactive
 export function proxyRefs<T extends object>(
   objectWithRefs: T
 ): ShallowUnwrapRef<T> {
@@ -168,6 +207,7 @@ class ObjectRefImpl<T extends object, K extends keyof T> {
   }
 }
 
+// reactive -> ref 做了一个到原对象的代理
 export function toRef<T extends object, K extends keyof T>(
   object: T,
   key: K
@@ -223,6 +263,7 @@ type UnwrapRefSimple<T> = T extends
 // Extract all known symbols from an object
 // when unwrapping Object the symbols are not `in keyof`, this should cover all the
 // known symbols
+// 抽取symbol类型，防止其在索引类型时丢失
 type SymbolExtract<T> = (T extends { [Symbol.asyncIterator]: infer V }
   ? { [Symbol.asyncIterator]: V }
   : {}) &
