@@ -33,14 +33,18 @@ export {
   RefUnwrapBailTypes
 } from './ref'
 export {
+  // 响应式入口，new proxy()生成代理
   reactive,
   readonly,
   isReactive,
+  // IS_READONLY标志符为true 例如computed()返回的对象就是只读的
   isReadonly,
   isProxy,
   shallowReactive,
   shallowReadonly,
+  // 只接受对象，reactive()时会跳过该部分
   markRaw,
+  // proxy代理对应的原始值
   toRaw,
   ReactiveFlags,
   DeepReadonly

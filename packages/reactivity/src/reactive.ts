@@ -10,7 +10,7 @@ import {
   readonlyCollectionHandlers,
   shallowCollectionHandlers
 } from './collectionHandlers'
-import { UnwrapRef, Ref } from './ref'
+import { UnwrapRef, Ref, ref } from './ref'
 
 export const enum ReactiveFlags {
   SKIP = '__v_skip',
@@ -56,9 +56,22 @@ function getTargetType(value: Target) {
     : targetTypeMap(toRawType(value))
 }
 
+// 本身为ref类型不解套
+// ref，Ref类型中若value为对象有两种情况，若shallowRef则value为单纯的对象，不然则为响应式对象
 // only unwrap nested ref
 type UnwrapNestedRefs<T> = T extends Ref ? T : UnwrapRef<T>
 
+let a = ref(1)
+let b = {
+  name: {
+    name: a
+  }
+}
+b.name.name.value
+let c = reactive(b)
+c.name.name
+
+// 会处理内部任意嵌套了ref的情况
 export function reactive<T extends object>(target: T): UnwrapNestedRefs<T>
 export function reactive(target: object) {
   // if trying to observe a readonly proxy, return the readonly version.
@@ -154,8 +167,11 @@ function createReactiveObject(
     return target
   }
   // target already has corresponding Proxy
+  // weakMap中存有  target -> proxy
+  // 区分只读与非只读情况
   const proxyMap = isReadonly ? readonlyMap : reactiveMap
   const existingProxy = proxyMap.get(target)
+  // 一个target对应一个proxy?
   if (existingProxy) {
     return existingProxy
   }
