@@ -171,7 +171,7 @@ function createReactiveObject(
   // 区分只读与非只读情况
   const proxyMap = isReadonly ? readonlyMap : reactiveMap
   const existingProxy = proxyMap.get(target)
-  // 一个target对应一个proxy?
+  // 一个target对应一个proxy，单例模式
   if (existingProxy) {
     return existingProxy
   }

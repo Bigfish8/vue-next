@@ -36,11 +36,15 @@ export {
   // 响应式入口，new proxy()生成代理
   reactive,
   readonly,
+  // 是否为响应式 ReactiveFlags.IS_REACTIVE
   isReactive,
   // IS_READONLY标志符为true 例如computed()返回的对象就是只读的
   isReadonly,
+  // isReactive或者isReadonly
   isProxy,
+  // 同上，浅reactive
   shallowReactive,
+  // 同上，浅readonly
   shallowReadonly,
   // 只接受对象，reactive()时会跳过该部分
   markRaw,

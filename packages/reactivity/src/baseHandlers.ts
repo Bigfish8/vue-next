@@ -71,18 +71,21 @@ const arrayInstrumentations: Record<string, Function> = {}
 
 function createGetter(isReadonly = false, shallow = false) {
   return function get(target: Target, key: string | symbol, receiver: object) {
+    // 原来这个属性是代理到proxy上面
     if (key === ReactiveFlags.IS_REACTIVE) {
       return !isReadonly
     } else if (key === ReactiveFlags.IS_READONLY) {
       return isReadonly
     } else if (
       key === ReactiveFlags.RAW &&
+      // receiver必须是当前proxy而不是继承对象
       receiver === (isReadonly ? readonlyMap : reactiveMap).get(target)
     ) {
       return target
     }
 
     const targetIsArray = isArray(target)
+    // 注意这里数组行为也不track
     if (targetIsArray && hasOwn(arrayInstrumentations, key)) {
       return Reflect.get(arrayInstrumentations, key, receiver)
     }
@@ -183,6 +186,7 @@ function ownKeys(target: object): (string | number | symbol)[] {
   return Reflect.ownKeys(target)
 }
 
+// 基础handlers
 export const mutableHandlers: ProxyHandler<object> = {
   get,
   set,
