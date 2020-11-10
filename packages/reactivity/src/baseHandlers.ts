@@ -24,19 +24,23 @@ import {
   isIntegerKey,
   extend
 } from '@vue/shared'
-import { isRef } from './ref'
+import { isRef, ref } from './ref'
 
+ // 取出内置symbol
 const builtInSymbols = new Set(
   Object.getOwnPropertyNames(Symbol)
     .map(key => (Symbol as any)[key])
     .filter(isSymbol)
 )
 
+// 不同的getter
 const get = /*#__PURE__*/ createGetter()
 const shallowGet = /*#__PURE__*/ createGetter(false, true)
 const readonlyGet = /*#__PURE__*/ createGetter(true)
 const shallowReadonlyGet = /*#__PURE__*/ createGetter(true, true)
 
+// object,key -> 数组原生方法 value -> 对原生方法改进，改动了啥？
+// 
 const arrayInstrumentations: Record<string, Function> = {}
 // instrument identity-sensitive Array methods to account for possible reactive
 // values
@@ -45,6 +49,7 @@ const arrayInstrumentations: Record<string, Function> = {}
   arrayInstrumentations[key] = function(this: unknown[], ...args: unknown[]) {
     const arr = toRaw(this)
     for (let i = 0, l = this.length; i < l; i++) {
+      // track 把当前effect作为依赖
       track(arr, TrackOpTypes.GET, i + '')
     }
     // we run the method using the original args first (which may be reactive)
@@ -59,6 +64,8 @@ const arrayInstrumentations: Record<string, Function> = {}
 })
 // instrument length-altering mutation methods to avoid length being tracked
 // which leads to infinite loops in some cases (#2137)
+// todo pause
+// 为何这里要暂停 watchEffect
 ;(['push', 'pop', 'shift', 'unshift', 'splice'] as const).forEach(key => {
   const method = Array.prototype[key] as any
   arrayInstrumentations[key] = function(this: unknown[], ...args: unknown[]) {
@@ -69,6 +76,7 @@ const arrayInstrumentations: Record<string, Function> = {}
   }
 })
 
+// target 指 proxy对象
 function createGetter(isReadonly = false, shallow = false) {
   return function get(target: Target, key: string | symbol, receiver: object) {
     // 原来这个属性是代理到proxy上面
@@ -85,7 +93,7 @@ function createGetter(isReadonly = false, shallow = false) {
     }
 
     const targetIsArray = isArray(target)
-    // 注意这里数组行为也不track
+    // 注意这里数组行为在arrayInstrumentations中进行track
     if (targetIsArray && hasOwn(arrayInstrumentations, key)) {
       return Reflect.get(arrayInstrumentations, key, receiver)
     }
@@ -100,6 +108,8 @@ function createGetter(isReadonly = false, shallow = false) {
       return res
     }
 
+    // isReadonly 不会track
+    // 因为unchangeable
     if (!isReadonly) {
       track(target, TrackOpTypes.GET, key)
     }
@@ -118,6 +128,7 @@ function createGetter(isReadonly = false, shallow = false) {
       // Convert returned value into a proxy as well. we do the isObject check
       // here to avoid invalid value warning. Also need to lazy access readonly
       // and reactive here to avoid circular dependency.
+      // 因为如果deep reactive，迭代函数栈会爆掉
       return isReadonly ? readonly(res) : reactive(res)
     }
 
@@ -125,8 +136,25 @@ function createGetter(isReadonly = false, shallow = false) {
   }
 }
 
+
+let a = ref(1)
+
+let b = reactive([a, a])
+// 不会unwrap
+b[1].value
+
+let b1 = reactive({a: a})
+// unwrap了
+b1.a
+
+// Unwrap了
+let b2 = reactive({'2': a})
+b2[2]
+
 const set = /*#__PURE__*/ createSetter()
 const shallowSet = /*#__PURE__*/ createSetter(true)
+
+
 
 function createSetter(shallow = false) {
   return function set(

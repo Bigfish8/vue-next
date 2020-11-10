@@ -154,7 +154,8 @@ export function track(target: object, type: TrackOpTypes, key: unknown) {
   if (!dep) {
     depsMap.set(key, (dep = new Set()))
   }
-  // activeEffect为一个fn，可能有很多ref指向这个fn
+  // activeEffect为一个fn，可能有很多ref或者reactive指向这个fn
+  // track过程中会追踪raw value -> effect的关系，raw value更新(set)会依次触发effect
   if (!dep.has(activeEffect)) {
     dep.add(activeEffect)
     activeEffect.deps.push(dep)

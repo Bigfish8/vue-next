@@ -1,3 +1,7 @@
+/**
+ * @done
+ */
+
 import { isObject, toRawType, def } from '@vue/shared'
 import {
   mutableHandlers,
@@ -50,6 +54,7 @@ function targetTypeMap(rawType: string) {
   }
 }
 
+// 这里对应markRaw，type定为invalid
 function getTargetType(value: Target) {
   return value[ReactiveFlags.SKIP] || !Object.isExtensible(value)
     ? TargetType.INVALID
@@ -135,6 +140,7 @@ export function readonly<T extends object>(
 // properties are readonly, and does NOT unwrap refs nor recursively convert
 // returned properties.
 // This is used for creating the props proxy object for stateful components.
+// 用于处理props 很有用！，会使root value只读，但是可以更改deep value
 export function shallowReadonly<T extends object>(
   target: T
 ): Readonly<{ [K in keyof T]: UnwrapNestedRefs<T[K]> }> {
@@ -182,13 +188,16 @@ function createReactiveObject(
   }
   const proxy = new Proxy(
     target,
+    // 这两种handler的区别在哪里？
     targetType === TargetType.COLLECTION ? collectionHandlers : baseHandlers
   )
   proxyMap.set(target, proxy)
   return proxy
 }
 
+// ReactiveFlags.RAW的属性是利用fn的作用域，在prxoy里的get访问到的
 export function isReactive(value: unknown): boolean {
+  // 可能是个被readonly的reactive()对象
   if (isReadonly(value)) {
     return isReactive((value as Target)[ReactiveFlags.RAW])
   }
@@ -204,12 +213,15 @@ export function isProxy(value: unknown): boolean {
 }
 
 // toRaw用来获取用reactive(val)后的val的值
+// 因为map追踪的是原对象到代理的关系图
 export function toRaw<T>(observed: T): T {
   return (
     (observed && toRaw((observed as Target)[ReactiveFlags.RAW])) || observed
   )
 }
 
+// 标记有什么用呢？
+// 将不做proxy，直接返回
 export function markRaw<T extends object>(value: T): T {
   def(value, ReactiveFlags.SKIP, true)
   return value
