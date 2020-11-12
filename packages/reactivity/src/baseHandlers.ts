@@ -1,3 +1,7 @@
+/**
+ * @done
+ */
+
 import {
   reactive,
   readonly,
@@ -13,7 +17,8 @@ import {
   trigger,
   ITERATE_KEY,
   pauseTracking,
-  resetTracking
+  resetTracking,
+  effect
 } from './effect'
 import {
   isObject,
@@ -47,6 +52,7 @@ const arrayInstrumentations: Record<string, Function> = {}
 ;(['includes', 'indexOf', 'lastIndexOf'] as const).forEach(key => {
   const method = Array.prototype[key] as any
   arrayInstrumentations[key] = function(this: unknown[], ...args: unknown[]) {
+    // 这里为什么
     const arr = toRaw(this)
     for (let i = 0, l = this.length; i < l; i++) {
       // track 把当前effect作为依赖
@@ -155,6 +161,23 @@ const set = /*#__PURE__*/ createSetter()
 const shallowSet = /*#__PURE__*/ createSetter(true)
 
 
+let cc = {}
+let a2 = new Proxy(cc, {
+  get(target, key, receiver) {
+
+  }
+})
+
+let aa = ref(1)
+let bb = reactive([aa, aa, aa])
+// 新值必须为ref
+bb[1] = ref(2)
+
+let bb1 = reactive({
+  name: aa
+})
+// 新值必须为ref unwrap的值
+bb1.name = 2
 
 function createSetter(shallow = false) {
   return function set(
@@ -164,8 +187,14 @@ function createSetter(shallow = false) {
     receiver: object
   ): boolean {
     const oldValue = (target as any)[key]
+    // 如果为shallow的话
+    // 不会自动给属性为ref的对象兼容，而是直接替换
     if (!shallow) {
       value = toRaw(value)
+      // 这种情况不trigger
+      // 当old value为ref 且新的value不为ref
+      // 会在ref的getter上进行trigger
+      // 为什么要!isArray呢
       if (!isArray(target) && isRef(oldValue) && !isRef(value)) {
         oldValue.value = value
         return true
@@ -173,13 +202,13 @@ function createSetter(shallow = false) {
     } else {
       // in shallow mode, objects are set as-is regardless of reactive or not
     }
-
     const hadKey =
       isArray(target) && isIntegerKey(key)
         ? Number(key) < target.length
         : hasOwn(target, key)
     const result = Reflect.set(target, key, value, receiver)
     // don't trigger if target is something up in the prototype chain of original
+    // receiver是什么？ 执行行为那个对象，可能来自原型链下游
     if (target === toRaw(receiver)) {
       if (!hadKey) {
         trigger(target, TriggerOpTypes.ADD, key, value)
@@ -203,6 +232,7 @@ function deleteProperty(target: object, key: string | symbol): boolean {
 
 function has(target: object, key: string | symbol): boolean {
   const result = Reflect.has(target, key)
+  // 如果为内置symbol，则不会track
   if (!isSymbol(key) || !builtInSymbols.has(key)) {
     track(target, TrackOpTypes.HAS, key)
   }

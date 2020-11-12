@@ -10,6 +10,11 @@ import {
   isMap
 } from '@vue/shared'
 
+/**
+ * 哪些是collection对象
+ * map, set, weakMap, weakSet
+ */
+
 export type CollectionTypes = IterableCollections | WeakCollections
 
 type IterableCollections = Map<any, any> | Set<any>
@@ -67,6 +72,7 @@ function has(this: CollectionTypes, key: unknown, isReadonly = false): boolean {
 
 function size(target: IterableCollections, isReadonly = false) {
   target = (target as any)[ReactiveFlags.RAW]
+  // question 这里为啥还有个toRaw?
   !isReadonly && track(toRaw(target), TrackOpTypes.ITERATE, ITERATE_KEY)
   return Reflect.get(target, 'size', target)
 }
@@ -232,6 +238,31 @@ function createReadonlyMethod(type: TriggerOpTypes): Function {
   }
 }
 
+// 这里的this好像很难理解
+let a = {
+  getName() {
+      return 'zy'
+  },
+  age: 14
+}
+
+let b = new Proxy(a, {
+  get(target, key, receiver) {
+      return Reflect.get(c, key, receiver)
+  }
+})
+
+const c = {
+  getName() {
+      console.log(this === b)
+      return '123'
+  }
+}
+
+b.getName()
+
+// this 问题的解释
+// 无论代理了多少层,this === b
 const mutableInstrumentations: Record<string, Function> = {
   get(this: MapTypes, key: unknown) {
     return get(this, key)
@@ -299,6 +330,8 @@ iteratorMethods.forEach(method => {
 })
 
 function createInstrumentationGetter(isReadonly: boolean, shallow: boolean) {
+  // 这里是全部的proxy handler
+  // collection只会代理方法
   const instrumentations = shallow
     ? shallowInstrumentations
     : isReadonly
@@ -319,6 +352,7 @@ function createInstrumentationGetter(isReadonly: boolean, shallow: boolean) {
     }
 
     return Reflect.get(
+      // 函数方法在instrumentation中进行了改造
       hasOwn(instrumentations, key) && key in target
         ? instrumentations
         : target,
@@ -328,6 +362,7 @@ function createInstrumentationGetter(isReadonly: boolean, shallow: boolean) {
   }
 }
 
+// col type 只有getter
 export const mutableCollectionHandlers: ProxyHandler<CollectionTypes> = {
   get: createInstrumentationGetter(false, false)
 }
