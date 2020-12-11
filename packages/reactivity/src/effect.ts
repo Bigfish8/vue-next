@@ -1,3 +1,7 @@
+/**
+ * @done
+ */
+
 import { TrackOpTypes, TriggerOpTypes } from './operations'
 import { EMPTY_OBJ, isArray, isIntegerKey, isMap } from '@vue/shared'
 
@@ -21,10 +25,15 @@ export interface ReactiveEffect<T = any> {
 }
 
 export interface ReactiveEffectOptions {
+  // 初始化时是否执行fn
   lazy?: boolean
+  // 执行时已sheduler(effect)代替effect()
   scheduler?: (job: ReactiveEffect) => void
+  // track触发时的回调函数
   onTrack?: (event: DebuggerEvent) => void
+  // trigger回调
   onTrigger?: (event: DebuggerEvent) => void
+  // stop的回调
   onStop?: () => void
   allowRecurse?: boolean
 }
@@ -84,9 +93,12 @@ function createReactiveEffect<T = any>(
 ): ReactiveEffect<T> {
   const effect = function reactiveEffect(): unknown {
     if (!effect.active) {
+      // todo
       return options.scheduler ? undefined : fn()
     }
     if (!effectStack.includes(effect)) {
+      // effect就是指自身这个reactive effect
+      // 因为每次effect()执行会收集依赖，所以需要先清除
       cleanup(effect)
       try {
         enableTracking()
@@ -105,11 +117,14 @@ function createReactiveEffect<T = any>(
   effect._isEffect = true
   effect.active = true
   effect.raw = fn
+  // todo 为什么要收集双向的依赖
   effect.deps = []
   effect.options = options
   return effect
 }
 
+
+// deps是一个数组，每一项是包含该effect的Set
 function cleanup(effect: ReactiveEffect) {
   const { deps } = effect
   if (deps.length) {
@@ -123,6 +138,7 @@ function cleanup(effect: ReactiveEffect) {
 let shouldTrack = true
 const trackStack: boolean[] = []
 
+// 这里实现停止依赖收集
 export function pauseTracking() {
   trackStack.push(shouldTrack)
   shouldTrack = false
@@ -158,6 +174,7 @@ export function track(target: object, type: TrackOpTypes, key: unknown) {
   // track过程中会追踪raw value -> effect的关系，raw value更新(set)会依次触发effect
   if (!dep.has(activeEffect)) {
     dep.add(activeEffect)
+    // dep储存了在哪些map中
     activeEffect.deps.push(dep)
     if (__DEV__ && activeEffect.options.onTrack) {
       // 用于在开发环境console?
@@ -177,6 +194,7 @@ export function trigger(
   key?: unknown,
   newValue?: unknown,
   oldValue?: unknown,
+  // clear()会传这个
   oldTarget?: Map<unknown, unknown> | Set<unknown>
 ) {
   // 当前对象key -> effect Set的映射map

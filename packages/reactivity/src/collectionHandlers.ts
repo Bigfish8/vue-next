@@ -1,3 +1,7 @@
+/**
+ * @done
+ */
+
 import { toRaw, reactive, readonly, ReactiveFlags } from './reactive'
 import { track, trigger, ITERATE_KEY, MAP_KEY_ITERATE_KEY } from './effect'
 import { TrackOpTypes, TriggerOpTypes } from './operations'
@@ -47,6 +51,7 @@ function get(
   if (key !== rawKey) {
     !isReadonly && track(rawTarget, TrackOpTypes.GET, key)
   }
+  // track key也会track rawKey
   !isReadonly && track(rawTarget, TrackOpTypes.GET, rawKey)
   const { has } = getProto(rawTarget)
   const wrap = isReadonly ? toReadonly : isShallow ? toShallow : toReactive
@@ -61,6 +66,9 @@ function has(this: CollectionTypes, key: unknown, isReadonly = false): boolean {
   const target = (this as any)[ReactiveFlags.RAW]
   const rawTarget = toRaw(target)
   const rawKey = toRaw(key)
+  // 这里为什么要追踪两种key呢
+  // 1 -> 原obj 2 -> proxy(用遍历返回)
+  // trigger不一样
   if (key !== rawKey) {
     !isReadonly && track(rawTarget, TrackOpTypes.HAS, key)
   }
@@ -73,6 +81,7 @@ function has(this: CollectionTypes, key: unknown, isReadonly = false): boolean {
 function size(target: IterableCollections, isReadonly = false) {
   target = (target as any)[ReactiveFlags.RAW]
   // question 这里为啥还有个toRaw?
+  // 因为会有readonly(reactive(obj))的情况
   !isReadonly && track(toRaw(target), TrackOpTypes.ITERATE, ITERATE_KEY)
   return Reflect.get(target, 'size', target)
 }
@@ -90,12 +99,16 @@ function add(this: SetTypes, value: unknown) {
 }
 
 function set(this: MapTypes, key: unknown, value: unknown) {
+  // 把一个readonly的map to Raw之后还是响应式
+  // contribute
   value = toRaw(value)
   const target = toRaw(this)
   const { has, get } = getProto(target)
 
+  // 此时的key可能为proxy
   let hadKey = has.call(target, key)
   if (!hadKey) {
+    // 推荐用proxy后的key作为对象
     key = toRaw(key)
     hadKey = has.call(target, key)
   } else if (__DEV__) {
@@ -163,6 +176,7 @@ function createForEach(isReadonly: boolean, isShallow: boolean) {
       // important: make sure the callback is
       // 1. invoked with the reactive map as `this` and 3rd arg
       // 2. the value received should be a corresponding reactive/readonly.
+      // foreach可能存在value
       return callback.call(thisArg, wrap(value), wrap(key), observed)
     })
   }
@@ -196,6 +210,7 @@ function createIterableMethod(
     const isPair =
       method === 'entries' || (method === Symbol.iterator && targetIsMap)
     const isKeyOnly = method === 'keys' && targetIsMap
+    // 这里为什么需要参数?可能会有覆盖默认迭代器的行为
     const innerIterator = target[method](...args)
     const wrap = isReadonly ? toReadonly : isShallow ? toShallow : toReactive
     !isReadonly &&
@@ -375,6 +390,7 @@ export const readonlyCollectionHandlers: ProxyHandler<CollectionTypes> = {
   get: createInstrumentationGetter(true, false)
 }
 
+// 不推荐用reactive key?
 function checkIdentityKeys(
   target: CollectionTypes,
   has: (key: unknown) => boolean,
@@ -385,7 +401,7 @@ function checkIdentityKeys(
     const type = toRawType(target)
     console.warn(
       `Reactive ${type} contains both the raw and reactive ` +
-        `versions of the same object${type === `Map` ? ` as keys` : ``}, ` +
+        `tt${type === `Map` ? ` as keys` : ``}, ` +
         `which can lead to inconsistencies. ` +
         `Avoid differentiating between the raw and reactive versions ` +
         `of an object and only use the reactive version if possible.`

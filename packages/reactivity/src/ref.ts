@@ -61,6 +61,10 @@ let a = ref()
 a.value = {
   a: '123'
 }
+a.value = {
+  b: '123'
+}
+
 
 export function shallowRef<T extends object>(
   value: T
@@ -206,6 +210,14 @@ class ObjectRefImpl<T extends object, K extends keyof T> {
     this._object[this._key] = newVal
   }
 }
+
+let a1 = reactive({
+  name: 'zy'
+})
+
+let b1 = toRefs(a1)
+
+b1.name.value
 
 // reactive -> ref 做了一个到原对象的代理
 export function toRef<T extends object, K extends keyof T>(
